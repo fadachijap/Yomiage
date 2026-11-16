@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>よみあげアプリ（YomiScript試作版）</title>
+    <style>
+      :root {
+        --bg: #f7f3ea;
+        --fg: #26221c;
+        --muted: #746b5d;
+        --line: #dcd3c2;
+        --card: #fffdf8;
+        --accent: #1d4e79;
+        --mark: #fbe7a8;
+        --mark-fg: #26221c;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #15171a;
+          --fg: #e8e4da;
+          --muted: #9b9587;
+          --line: #33373c;
+          --card: #1d2024;
+          --accent: #8fc1ea;
+          --mark: #5a4a16;
+          --mark-fg: #fff6d8;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font: 16px/1.8 "Hiragino Kaku Gothic ProN", "Yu Gothic", system-ui, sans-serif;
+      }
+      header, main, footer {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 0 16px;
+      }
+      header { padding-top: 24px; }
+      h1 { margin: 0; font-size: 26px; font-weight: 700; }
+      .sub { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+      section {
+        margin: 18px 0;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--card);
+      }
+      h2 { margin: 0 0 10px; font-size: 17px; }
+      label { display: block; margin: 8px 0 4px; font-size: 14px; color: var(--muted); }
+      input[type="text"], input[type="password"], input[type="url"], select, textarea {
+        width: 100%;
+        padding: 9px 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--bg);
+        color: var(--fg);
+        font: inherit;
+        font-size: 15px;
+      }
+      textarea { min-height: 130px; resize: vertical; }
+      textarea.mono { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+      .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+      button {
+        min-height: 40px;
+        padding: 0 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--card);
+        color: var(--fg);
+        font: inherit;
+        font-size: 15px;
+        cursor: pointer;
+      }
+      button:disabled { opacity: 0.5; cursor: default; }
+      button.primary {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: #fff;
+        font-weight: 600;
+      }
+      @media (prefers-color-scheme: dark) {
+        button.primary { color: #10131a; }
+      }
+      .note { color: var(--muted); font-size: 13px; }
+      .status { flex: 1 1 200px; color: var(--muted); font-size: 14px; }
+      .err { color: #c0392b; }
+      details { margin: 18px 0; }
+      details > section { margin: 10px 0 0; }
+      summary { cursor: pointer; color: var(--muted); font-size: 15px; }
+      .deck {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: var(--bg);
+        border-bottom: 1px solid var(--line);
+        padding: 8px 0;
+      }
+      .deck .row { margin-top: 0; }
+      progress {
+        display: block;
+        width: 100%;
+        height: 3px;
+        border: 0;
+        margin-top: 8px;
+        background: var(--line);
+        accent-color: var(--accent);
+      }
+      #story {
+        font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif CJK JP", serif;
+        font-size: 18px;
+        line-height: 2.1;
+      }
+      #story:empty::before {
+        content: "変換すると、ここに文が並びます。文をクリックすると、その文から読み上げます。";
+        color: var(--muted);
+        font-family: inherit;
+        font-size: 14px;
+      }
+      .s { border-radius: 3px; cursor: pointer; transition: background-color 0.15s; }
+      .s:hover { background: color-mix(in srgb, var(--mark) 45%, transparent); }
+      .s.now { background: var(--mark); color: var(--mark-fg); }
+      .s.failed { color: var(--muted); text-decoration: line-through dotted; cursor: default; }
+      #ys {
+        margin: 6px 0 0;
+        max-height: 8em;
+        overflow: auto;
+        padding: 8px 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--card);
+        font: 13px/1.7 ui-monospace, Menlo, monospace;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      footer {
+        padding-top: 10px;
+        padding-bottom: 40px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 13px;
+      }
+      footer a { color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>よみあげアプリ</h1>
+      <p class="sub">YomiScript試作版 — AIが「読み」を決め、ブラウザの中の音声モデル（Kokoro）が読み上げます。漢字の読み間違いが少ないのが特長です。</p>
+    </header>
+    <main>
+      <details id="settingsBox">
+        <summary>設定（AIのAPIキー）</summary>
+        <section>
+          <label for="provider">変換に使うAI</label>
+          <select id="provider">
+            <option value="gemini">Gemini（Google）</option>
+            <option value="claude">Claude（Anthropic）</option>
+          </select>
+          <label for="apikey">APIキー</label>
+          <input type="password" id="apikey" autocomplete="off" placeholder="健康ノートで使っているものと同じキーで大丈夫です" />
+          <label for="model">モデル名</label>
+          <input type="text" id="model" />
+          <div class="row">
+            <button id="saveSettings" type="button">保存する</button>
+            <span class="note">キーはこのブラウザの中だけに保存され、外部に送られることはありません（変換の通信先は選んだAIの公式APIだけです）。</span>
+          </div>
+        </section>
+      </details>
+
+      <section>
+        <h2>1. 文章を入れる</h2>
+        <textarea id="input" placeholder="メールや記事の文章をここに貼り付けてください"></textarea>
+        <div class="row">
+          <button id="sample" type="button">サンプル文を入れる</button>
+          <button id="openFile" type="button">テキストファイルを開く</button>
+          <input type="file" id="file" accept=".txt,.md,text/plain" hidden />
+        </div>
+        <label for="url">記事のURLから取り込む（サイトによっては取得できないことがあります）</label>
+        <div class="row" style="margin-top:0">
+          <input type="url" id="url" placeholder="https://…" style="flex:1 1 260px" />
+          <button id="fetchUrl" type="button">取得する</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>2. 読みに変換する</h2>
+        <div class="row" style="margin-top:0">
+          <button id="convert" type="button" class="primary">YomiScriptに変換する</button>
+          <span class="status" id="convStatus">APIキーの設定が必要です（上の「設定」から）。</span>
+        </div>
+        <p class="note">変換は文のまとまりごとにAIへ送ります。長い文章ほど時間がかかります。変換だけ先に済ませておけば、再生はブラウザの中だけで行われます。</p>
+      </section>
+
+      <div class="deck">
+        <div class="row">
+          <button id="prev" type="button" disabled>前の文</button>
+          <button id="play" type="button" class="primary" disabled style="min-width:96px">再生</button>
+          <button id="next" type="button" disabled>次の文</button>
+          <span class="status" id="status">文章を変換すると再生できます。</span>
+        </div>
+        <progress id="progress" value="0" max="1"></progress>
+      </div>
+
+      <section>
+        <div id="story"></div>
+        <details>
+          <summary>いま読んでいる文のYomiScript</summary>
+          <pre id="ys"></pre>
+        </details>
+      </section>
+
+      <details>
+        <summary>YomiScriptを直接再生する（APIキー不要）</summary>
+        <section>
+          <textarea id="ysInput" class="mono"></textarea>
+          <div class="row">
+            <button id="playYs" type="button">このYomiScriptを読み上げる</button>
+            <span class="note">1行が1文です。変換結果の確認や、読みの手直しに使えます。</span>
+          </div>
+        </section>
+      </details>
+    </main>
+    <footer>
+      <p>
+        読み上げには <a href="https://github.com/receptron/yomiscript">YomiScript</a>（中島聡さん、Apache License 2.0）と Kokoro-82M を使っています。
+        音声モデルと辞書は初回だけ Hugging Face からダウンロードされ（合計 約200MB）、次回からはブラウザに保存されたものを使います。
+        文章とAPIキーがこのパソコンの外に出るのは、変換のために選んだAIへ送る時だけです。
+      </p>
+    </footer>
+
+    <!-- Katarite worker: the demo's aozora_worker.js pattern, with its imports on CDNs instead of vendored files.
+         modelFetcher/modelBytes below are from demo/ys_web/web/model_cache.js of the YomiScript project (Apache-2.0). -->
+    <script type="text/plain" id="worker-src">
+const MODEL_CACHE = "yomiscript-models";
+const OLD_CACHES = ["yomiscript-models-1"];
+const HF = "https://huggingface.co/", RESOLVE = "/resolve/";
+const COMMIT = /^[0-9a-f]{40}$/;
+const revisionApiUrl = (base) => {
+  const at = base.indexOf(RESOLVE);
+  if (!base.startsWith(HF) || at <= HF.length || !base.endsWith("/")) return null;
+  const rest = base.slice(at + RESOLVE.length), revision = rest.slice(0, rest.indexOf("/"));
+  return revision ? `${HF}api/models/${base.slice(HF.length, at)}/revision/${revision}` : null;
+};
+const pinnedBase = (base, sha) => base.replace(/\/resolve\/[^/]+\//, `/resolve/${sha}/`);
+const resolveCommit = async (base) => {
+  const api = revisionApiUrl(base);
+  if (!api) return null;
+  try {
+    const r = await fetch(api, { cache: "no-cache" });
+    const sha = r.ok ? (await r.json()).sha : null;
+    return COMMIT.test(sha) ? sha : null;
+  } catch { return null; }
+};
+const openCache = async () => { try { return await caches.open(MODEL_CACHE); } catch { return null; } };
+const dropOldCaches = async () => { try { await Promise.all(OLD_CACHES.map((name) => caches.delete(name))); } catch {} };
+const dropOtherCommits = async (cache, base, sha) => {
+  try {
+    const repository = base.slice(0, base.indexOf(RESOLVE) + RESOLVE.length), current = `${repository}${sha}/`;
+    const stale = (await cache.keys()).filter((q) => q.url.startsWith(repository) && !q.url.startsWith(current));
+    await Promise.all(stale.map((q) => cache.delete(q)));
+  } catch {}
+};
+async function modelFetcher(base) {
+  await dropOldCaches();
+  const sha = await resolveCommit(base);
+  const cache = sha && (await openCache());
+  if (!cache) return (path) => fetch(base + path);
+  const pinned = pinnedBase(base, sha);
+  await dropOtherCommits(cache, base, sha);
+  return async (path) => {
+    const url = pinned + path;
+    const hit = await cache.match(url).catch(() => undefined);
+    if (hit) return hit;
+    const r = await fetch(url);
+    if (r.ok) cache.put(url, r.clone()).catch(() => {});
+    return r;
+  };
+}
+const modelBytes = (fetchModel) => async (path) => {
+  const r = await fetchModel(path);
+  if (!r.ok) throw new Error(`${path}: ${r.status}`);
+  return new Uint8Array(await r.arrayBuffer());
+};
+
+import * as K from "https://cdn.jsdelivr.net/npm/@yomiscript/kokoro@0.1.3/+esm";
+const ORT_BASE = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/";
+const WEBKIT = /AppleWebKit/.test(navigator.userAgent) && !/Chrome\//.test(navigator.userAgent);
+
+async function start() {
+  const ort = await import(ORT_BASE + "ort.wasm.min.mjs");
+  ort.env.wasm.wasmPaths = ORT_BASE;
+  ort.env.wasm.numThreads = crossOriginIsolated && !WEBKIT ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
+  const bytes = modelBytes(await modelFetcher(K.KOKORO_MODELS_URL));
+  const E = new K.Engine(ort, async (file) => {
+    const b = await bytes(file);
+    return file.endsWith(".bin") ? b.buffer : b;
+  });
+  await E.init({ suffix: K.W16, executionProviders: ["wasm"] });
+  await E.synth("ja /a ↘/");
+  return E;
+}
+const engine = start();
+self.onmessage = async ({ data: { id, ys } }) => {
+  try {
+    const E = await engine;
+    if (ys == null) { self.postMessage({ id }); return; }
+    const t0 = performance.now(), { audio } = await E.synth(ys);
+    self.postMessage({ id, blob: new Blob([K.wav(audio)], { type: "audio/wav" }), seconds: audio.length / K.SR, ms: performance.now() - t0 });
+  } catch (e) {
+    self.postMessage({ id, error: String(e) });
+  }
+};
+    </script>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "@yomiscript/core": "https://cdn.jsdelivr.net/npm/@yomiscript/core@0.1.5/dist/index.js",
+          "@yomiscript/ja-accent": "https://cdn.jsdelivr.net/npm/@yomiscript/ja-accent@0.1.7/dist/index.js"
+        }
+      }
+    </script>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
