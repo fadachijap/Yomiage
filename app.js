@@ -332,9 +332,15 @@ class Reader {
     clearTimeout(this.gap);
     this.player.pause();
     this.playing = true;
-    $("play").textContent = "一時停止";
     this.show(i);
-    status(`${i + 1} / ${this.sentences.length} 文目を準備しています…`);
+    // 生成中はボタンに「一時停止」と出さない：押した直後に「一時停止」に
+    // 変わるのが「勝手に止まった」と読まれ、生成中に押すと生成が中断される
+    // のが今回の混乱の原因だった。音が出るまでボタン類を無効化する。
+    $("play").textContent = "生成中…";
+    $("play").disabled = true;
+    $("prev").disabled = true;
+    $("next").disabled = true;
+    status(`${i + 1} / ${this.sentences.length} 文目：音声を作っています…まだ音は出ません。終わるまで触らずにお待ちください。`);
     let got;
     try {
       got = await this.voice.get(i);
@@ -353,6 +359,10 @@ class Reader {
       return;
     }
     status(`${i + 1} / ${this.sentences.length} 文目（生成 ${(got.ms / 1000).toFixed(1)} 秒 ／ 音声 ${got.seconds.toFixed(1)} 秒）`);
+    // 音が鳴り始めてから初めて「一時停止」にする
+    $("play").disabled = false;
+    $("play").textContent = "一時停止";
+    this.show(i); // 前の文／次の文の有効・無効を元に戻す
     if (i + 1 < this.sentences.length && this.sentences[i + 1].ys) this.voice.get(i + 1).catch(() => {});
   }
   finished() {
@@ -371,6 +381,9 @@ class Reader {
     this.player.pause();
     this.playing = false;
     $("play").textContent = "再生";
+    $("play").disabled = false;
+    $("prev").disabled = this.at === 0;
+    $("next").disabled = this.at === this.sentences.length - 1;
   }
   fail(e) {
     this.stop();
@@ -383,6 +396,7 @@ class Reader {
     } else if (this.player.src && this.player.currentTime > 0 && !this.player.ended) {
       this.playing = true;
       $("play").textContent = "一時停止";
+      status("再生を再開しました");
       this.player.play().catch((e) => this.fail(e));
     } else {
       this.play(this.at);
@@ -442,6 +456,7 @@ async function setSentences(sentences) {
 
 // ---- UI wiring ----
 $("story").addEventListener("click", (e) => {
+  if ($("play").disabled) return; // 音声の生成中は、文のクリックでの中断も防ぐ
   const node = e.target.closest(".s");
   if (node && reader) reader.play(Number(node.dataset.i));
 });
